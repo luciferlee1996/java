@@ -110,28 +110,31 @@ public class Calc {
             return true;
         }
     }
+    private double eval_till_ending_op(String cur_op, double a){
+        do{
+            if(!op_stack.isEmpty()) break;
+            String last_op = op_stack.pop();
+            if(!(needs_to_op(last_op, cur_op) || cur_op.equals(""))){
+                op_stack.push(last_op);
+                break;
+            }
+            if(!num_stack.isEmpty()){
+                double top = num_stack.pop();
+                a = single_operation(top, a, last_op);
+            }else{
+                // exception
+                return 0;
+            }
+
+        }while(true);
+    }
     private double evaluate(ListIterator<String> liter){
         double res = 0;
         String last_op = new String();
         while(liter.hasNext()){
-            if(!op_stack.isEmpty())
-                last_op = op_stack.pop();
             double a = fetch_num(liter);
             if(!liter.hasNext()){
                 // HERE!! reaches the end of the expression
-                while(!num_stack.isEmpty()){
-                    double top_num = num_stack.pop();
-                    a = single_operation(top_num, a, last_op);
-                    if(op_stack.isEmpty())
-                        break;
-                    last_op = op_stack.pop();
-                }
-                if(!num_stack.isEmpty() || !op_stack.isEmpty()){
-                    // exception
-                    return 0;
-                }
-                res = a;
-                break;
             }
             String op = liter.next();
             switch (op){
@@ -140,28 +143,16 @@ public class Calc {
                 case "*":
                 case "/":
                 case "%":
-                    if(needs_to_op(last_op, op)){
-                        double top_num = num_stack.pop();
-                        a = single_operation(top_num, a, op_stack.pop());
-                    }
+                    // ordinary operator
                     break;
                 case "(":
                     break;
                 case ")":
-                    //num_stack.push(a);
-                    do{
-                        if(last_op.equals("(")) break;
-                        double top_num = num_stack.pop();
-                        a = single_operation(top_num, a, last_op);
-                    }while(true);
+                    // ")"
                     break;
                 default:
                     // exception
                     return 0;
-            }
-            num_stack.push(a);
-            if(!op.equals(")")){
-                op_stack.push(op);
             }
         }
         return res;
