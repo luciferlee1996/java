@@ -4,8 +4,13 @@
 
 
 import java.util.*;
+import java.util.jar.Pack200;
 
 public class Calc {
+    private static final int NUM = 0, OP = 1, LB = 2, RB = 3, DK = 4, EMPTY = -1;
+    private static final int SUCCEED = 0, NO_NUM = 1, NO_OP = 2, OP_ERROR = 3;
+    private int last_type = EMPTY;
+    private String cur_str;
     private Stack<Double> num_stack = new Stack<Double>();
     private Stack<String> op_stack = new Stack<String>();
     private Map<String, Boolean> op_last_cur_map = new HashMap<String, Boolean>(){
@@ -65,132 +70,181 @@ public class Calc {
         // separate numbers and operators
         exp_list = Arrays.asList(exp.split("\\s|(?<=[\\+\\-\\*\\/%()])(?=[^\\s])|(?<=[^\\s])(?=[\\+\\-\\*\\/%()])"));
     }
-    private String fetch_num_string(ListIterator<String> liter){
-        // tested
-        if(!liter.hasNext()){
-            // exception
-            System.out.println("fetch num error, stack is empty");
-            return "0";
-        }
-        String str = liter.next();
-        String sign = new String();
-        if(str.equals("(")){
-            return str;
-        }
-        else if(str.equals("-")){
-            if(!liter.hasNext()){
-                // exception
-                System.out.println("except a number behind minus sign.");
-            }
-            sign = "-";
-            str = liter.next();
-        }
-        if(str.matches("\\d+(\\.\\d+)?")){
-            // str is a number
-            return sign + str;
-        }
-        else {
-            // exception
-            System.out.println("fetch_num_str() gets an illegal string, your input is " + str);
-            return "0";
-        }
-    }
-    private double single_operation(double a, double b, String op){
-        switch(op){
-            case "+":
-                return a + b;
-            case "-":
-                return a - b;
-            case "*":
-                return a * b;
-            case "/":
-                return a / b;
-            case "%":
-                return a % b;
-            default:
-                // exception
-                System.out.println("single operation error, your input is " + a + op + b);
-                return 0;
-        }
-    }
-    private boolean needs_to_op(String last, String cur){
-        if(op_last_cur_map.containsKey(last+cur)){
-            return op_last_cur_map.get(last+cur);
+    private int fetch_str(ListIterator<String> liter){
+        cur_str = liter.next();
+        if(cur_str.matches("\\d+")){
+            return NUM;
         }
         else{
-            //exception
-            System.out.println("map searching error, your input key is " + last + cur);
-            return true;
-        }
-    }
-    private double eval_till_ending_op(String cur_op, double a){
-        do{
-            if(op_stack.isEmpty()) break;
-            String last_op = op_stack.pop();
-            if(cur_op.equals(")") && last_op.equals("("))
-                break;
-            else if(!(needs_to_op(last_op, cur_op) || cur_op.equals(""))){
-                op_stack.push(last_op);
-                break;
-            }
-            if(!num_stack.isEmpty()){
-                double top = num_stack.pop();
-                a = single_operation(top, a, last_op);
-                //cur_op = last_op;
-            }else{
-                // exception
-                System.out.println("number of nums error.");
-                return 0;
-            }
-
-        }while(true);
-        if(!cur_op.equals(")"))
-            op_stack.push(cur_op);
-        return a;
-    }
-    private double evaluate(ListIterator<String> liter){
-        while(liter.hasNext()){
-            double a = 0;
-            String a_str = fetch_num_string(liter);
-            if(a_str.equals("(")){
-                op_stack.push(a_str);
-                continue;
-            }
-            else{
-                a = Double.parseDouble(a_str);
-            }
-            if(!liter.hasNext()){
-                num_stack.push(eval_till_ending_op("", a));
-                break;
-            }
-            String op = liter.next();
-            switch (op){
-                case "+":
+            switch (cur_str){
                 case "-":
+                    if(LB == last_type || EMPTY == last_type || OP == last_type){
+                        // it is a negative sign
+                        int ret = fetch_str(liter);
+                        if(ret != NUM){
+                            // exception, negative sign followed by non-num
+                            System.out.println("fetch_str error, negative sign followed by non-num");
+                            return DK;
+                        }
+                        cur_str = "-" + cur_str;
+                        return NUM;
+                    }
+                    else{
+                        // it is an operator
+                        return OP;
+                    }
+                case "+":
                 case "*":
                 case "/":
                 case "%":
-                case ")":
-                    num_stack.push(eval_till_ending_op(op, a));
-                    break;
+                    return OP;
                 case "(":
+                    return LB;
+                case ")":
+                    return RB;
+                default:
+                    return DK;
+            }
+
+        }
+    }
+    private boolean is_over(String last_op, String cur_op){
+        if(cur_op.equals(")")) return last_op.equals("(");
+        else if(cur_op.equals("")) return last_op.equals("");
+        else return !op_last_cur_map.get(last_op + cur_op);
+    }
+    private int eval_till_op(String op){
+        String last_op = "";
+        if(num_stack.isEmpty()){
+            num_stack.push(0.0);
+            return NO_NUM;
+        }
+
+        //if(op_stack.isEmpty()){
+        //    return NO_OP;
+        //}
+
+        double b = num_stack.pop();
+
+        while(true){
+            if(op_stack.isEmpty())
+                last_op = "";
+            else
+                last_op = op_stack.pop();
+            if(is_over(last_op, op)){
+                if(!(last_op.equals("(") && op.equals(")")) && !last_op.equals(""))
+                    op_stack.push(last_op);
+                //op_stack.push(op);
+                break;
+            }
+
+            if(num_stack.isEmpty()){
+                num_stack.push(b);
+                break;
+            }
+            double a = num_stack.pop();
+            switch(last_op){
+                case "+":
+                    b = a + b;
+                    break;
+                case "-":
+                    b = a - b;
+                    break;
+                case "*":
+                    b = a * b;
+                    break;
+                case "/":
+                    b = a / b;
+                    break;
+                case "%":
+                    b = a % b;
                     break;
                 default:
-                    // exception
-                    System.out.println("operator error, your input is " + op);
-                    return 0;
+                    // exception: unknown op
+                    System.out.println("eval error, unknown op");
+                    return OP_ERROR;
             }
+
         }
-        if(num_stack.size() != 1){
-            Double a = num_stack.pop();
-            num_stack.push(eval_till_ending_op("", a));
-        }
-        return(num_stack.pop());
+        num_stack.push(b);
+        return SUCCEED;
+
     }
     public double calculate(String exp){
         parse(exp);
+        double res = 0;
         ListIterator<String> liter = exp_list.listIterator();
-        return evaluate(liter);
+
+        while(liter.hasNext()){
+            int fetch_ret = fetch_str(liter);
+            switch (fetch_ret){
+                case NUM:
+                    if(EMPTY == last_type || OP == last_type || LB == last_type){
+                        // legal syntax
+                        num_stack.push(Double.parseDouble(cur_str));
+                        break;
+                    }
+                    else{
+                        // exception, RB + NUM || NUM + NUM
+                        System.out.println("fetch error, RB + NUM || NUM + NUM");
+                        return 0;
+                    }
+                case OP:
+                    if(RB == last_type || NUM == last_type){
+                        switch (eval_till_op(cur_str)){
+                            case SUCCEED:
+                                break;
+                            default:
+                                System.out.println("calculate error, eval failed");
+                                return 0.0;
+                        }
+                        if(!cur_str.equals(")"))
+                            op_stack.push(cur_str);
+                        break;
+                    }
+                    else{
+                        // exception, OP + OP || LB + OP || EMPTY + OP
+                        System.out.println("fetch error, OP + OP || LB + OP || EMPTY + OP");
+                        return 0;
+                    }
+                case LB:
+                    op_stack.push(cur_str);
+                    break;
+                case RB:
+                    switch (eval_till_op(cur_str)){
+                        case SUCCEED:
+                            break;
+                        default:
+                            System.out.println("calculate error, eval failed");
+                            return 0.0;
+                    }
+                    break;
+                default:
+                    // exception, unknown type
+                    System.out.println("fetch error, unknown type fetched");
+                    return 0;
+
+            }
+            last_type = fetch_ret;
+        }
+
+        // final evaluation
+        if(RB == last_type || NUM == last_type){
+            switch (eval_till_op("")){
+                case SUCCEED:
+                    break;
+                default:
+                    System.out.println("calculate error, eval failed");
+                    return 0.0;
+            }
+        }
+        else{
+            // exception, OP + OP || LB + OP || EMPTY + OP
+            System.out.println("fetch error, OP + END || LB + END || EMPTY + END");
+            return 0;
+        }
+
+        return num_stack.pop();
     }
 
     public static void main(String[] args){
